@@ -6,6 +6,10 @@ import time
 import sys
 import subprocess
 import altair as alt
+import matplotlib.pyplot as plt
+import matplotlib
+
+from run_event_animation import create_3d_animation
 
 
 # Fucntion to plot the duration and max speeds of a selected player:
@@ -39,7 +43,6 @@ def create_ind_runs_chart(player_runs, clicked_team, clicked_jersey):
         ],
         
     )
-    
 
     # Line Graph:
     max_speed_line = base_chart.mark_line(
@@ -63,8 +66,71 @@ def create_ind_runs_chart(player_runs, clicked_team, clicked_jersey):
     return combined_chart
     
 
+def prep_data_for_animation(pre_processed_data):
+    #time_to_analyse = 2
+    #frame_rate = 50
+    #start_he_time = 720651714118321
+
+    all_unique_time = pre_processed_data['he_time'].unique()
+    # Should be all sorted but ensure that in chronologic al order:
+    #all_unique_time.sort()
+    print(f"Sorted {len(all_unique_time)} into chronological order succesfully")
+
+    #if start_he_time not in all_unique_time:
+    #    print("Could not find start time  in he_list")
+    #    return None
+
+    # Found the start time, now grab the next number
+    #total_frames = time_to_analyse * frame_rate
+    #start_time_idx = list(all_unique_time).index(start_he_time)
+    #he_time_list = all_unique_time[start_time_idx: start_time_idx + total_frames]
+    #print(f"Sucesffuly grabbed {total_frames} timestamps")
+
+    # Filter the incoming df for the target times:
+    req_cols_for_skeletons = ['x','y', 'z', 'joint_id', 'he_time']
+    filtered_rows_subset = pre_processed_data[pre_processed_data['he_time'].isin(all_unique_time)]
+    filtered_cols_subset = filtered_rows_subset[req_cols_for_skeletons]
+
+    return filtered_cols_subset, all_unique_time
 
 
+# Switched from more generic animate 3d skeleton call to gct_anmiation for more detailed animations. 
+def animate_3d_skeleton(animation_data, time_list, run_event_id):
+    """
+    Function to animate a series pre-deterined time windows.
+    Find and save the next 
+    """
+    print("About to start the 3d plot...")
+    show_joint_numbers = False
+    #joint_segment = "left_fa" # Add this parameter into below fucntion call to isolate just the foot ankle.
+    create_3d_animation(animation_data, time_list, run_event_id,show_joint_numbers,color='r')
+    
+
+def start_3d_animation(player_runs, selected_run_id):
+    selected_run_event = player_runs[player_runs['run_seq'] == selected_run_id].iloc[0]
+    # Get data for animation:
+    req_joint_cols = ['he_time', 'x', 'y', 'z', 'grd_z', 'team_id', 'role_id','track_id', 'jersey', 'joint_id']
+    filtered_joint_df = pd.read_parquet(
+        'joint_data_1st_half.parquet',
+        columns=req_joint_cols,
+        filters=[
+            ('team_id', '==', int(selected_run_event['player_teamId'])),
+            ('role_id', '==', int(selected_run_event['player_roleId'])),
+            ('jersey', '==', float(selected_run_event['player_jerseyNumber'])),
+            ('he_time', '>=', selected_run_event['start_timestamp']),
+            ('he_time', '<=', selected_run_event['end_timestamp'])
+        ]
+    )
+
+    windowed_data, he_time_list = prep_data_for_animation(filtered_joint_df)
+    print(f"The collected ellapsed time for this event = {float(he_time_list[-1] - he_time_list[0]) * (10**-6)} and there are {len(filtered_joint_df)} frames")
+    if windowed_data is not None:
+        print(f"No data from the windowed event.\nMoving onto the next run event")
+    #print("Sneak peak at the windowed data:")
+    #print(f"{windowed_data.head(40)}\n")
+        # Now ready to visualize in 3d:
+    run_event_id = f"Jersey: {str(selected_run_event['player_jerseyNumber'])} and run number = {str(selected_run_id)}"
+    animate_3d_skeleton(windowed_data, he_time_list, run_event_id)
 
 
 
@@ -211,11 +277,11 @@ def dashboard_config(total_run_events_df, game_name):
         st.session_state["locked_jersey"] = team_1_leadershboard_selected_jersey
 
 
-    # 3. Save the current values into memory for the NEXT frame comparison
+    # Save the current values into memory for the next frame comparison
     st.session_state["prev_team_0_jersey"] = team_0_leadershboard_selected_jersey
     st.session_state["prev_team_1_jersey"] = team_1_leadershboard_selected_jersey
 
-    # 4. Use these locked variables as the absolute ground truth for your charts
+    # Use these locked variables as the absolute ground truth for your charts
     clicked_team = st.session_state["locked_team"]
     clicked_jersey = st.session_state["locked_jersey"]
             
@@ -255,10 +321,26 @@ def dashboard_config(total_run_events_df, game_name):
             selected_run_event = player_runs[player_runs['run_seq'] == selected_run_id].iloc[0]
             start_timestamp = selected_run_event['start_timestamp']
             end_timestamp = selected_run_event['end_timestamp']
+            run_event_time = str((int(end_timestamp) - int(start_timestamp)) * (10**-6))
 
             st.text(f"""Player team = {clicked_team}\nPlayer jersey = {clicked_jersey}\n
-                    Start time = {start_timestamp}\nEnd time = {end_timestamp}""")
+            Start time = {start_timestamp}\nEnd time = {end_timestamp}
+            ellapsed_time = {run_event_time}
+            """)
 
+            # Add the 3d plot:
+            if selected_run_id is not None:
+                st.subheader('3d animation of run event with L foot ankle joints:')
+                if st.button("Generate animation", key='bun_run_3d_animation'):
+                    matplotlib.use('TkAgg')
+
+                    start_3d_animation(player_runs, selected_run_id)
+                    
+                    matplotlib.use('Agg')
+                    st.success('Dismissed local window')
+            
+            else:
+                pass # dont show anything yet.
 
 
     else:

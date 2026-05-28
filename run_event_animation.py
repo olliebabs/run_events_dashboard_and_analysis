@@ -112,10 +112,10 @@ def create_3d_animation(animation_subset, target_timestamps, run_event_id,show_j
         # And now plot the velocity. velocity being then the change in disatnce with time.
         delta_z = joint_data['z'].diff(periods=2)
         delta_t = (joint_data['he_time'].diff(periods=2)) * 10**-6
-        print(f"\ndleta z :")
-        print(delta_z.head(10))
-        print(f'\ndelta t:')
-        print(delta_t.head(10))
+        #print(f"\ndleta z :")
+        #print(delta_z.head(10))
+        #print(f'\ndelta t:')
+        #print(delta_t.head(10))
         velocity_z = (delta_z/delta_t).shift(-1)
         velocity_z = velocity_z.fillna(0)
 
@@ -137,7 +137,7 @@ def create_3d_animation(animation_subset, target_timestamps, run_event_id,show_j
 
         #Accel axis and its right shift:
         ax_accel = ax_joint_graph.twinx()
-        ax_accel.spines['right'].set_position(('axes',1.05))
+        ax_accel.spines['right'].set_position(('axes',1.08))
 
         ax_accel.plot(
             relative_time,
